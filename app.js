@@ -1,131 +1,111 @@
-// --- Initialisation ---
 const video = document.getElementById('video');
-const hls = new Hls();
-let currentM3uData = null; // Stocke toute la liste parsée
+let hls = new Hls();
+let currentM3uData = { tv: [], movie: [], series: [] };
 
-window.onload = () => {
-    loadProfiles();
-};
-
-// --- Navigation ---
-function setActiveScreen(id) {
-    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
-    // Stop video si on quitte le lecteur
-    if (id !== 'player-screen' && video.src) {
-        video.pause();
-    }
-}
-
-// --- Gestion des Profils ---
-function loadProfiles() {
-    const list = document.getElementById('profile-list');
-    const profiles = JSON.parse(localStorage.getItem('kpro_profiles') || '[]');
-    list.innerHTML = profiles.map((p, i) => `
-        <div class="profile-item">
-            <div>
-                <strong>${p.name}</strong><br>
-                <span style="font-size:0.7rem; color:#aaa">${p.url.substring(0, 30)}...</span>
-            </div>
-            <div>
-                <button class="btn btn-primary" onclick="loginProfile(${i})">Se Connecter</button>
-                <button class="btn" style="background:#ff5252" onclick="deleteProfile(${i})">X</button>
-            </div>
-        </div>
-    `).join('');
-}
-
-function showAddProfile() { document.getElementById('add-profile-modal').classList.remove('hidden'); }
-function hideAddProfile() { document.getElementById('add-profile-modal').classList.add('hidden'); }
-
-function addNewProfile() {
-    const name = document.getElementById('p-name').value;
-    const url = document.getElementById('p-url').value;
-    if (!name || !url) return alert("Remplissez les champs !");
-
-    let profiles = JSON.parse(localStorage.getItem('kpro_profiles') || '[]');
-    profiles.push({ name, url });
-    localStorage.setItem('kpro_profiles', JSON.stringify(profiles));
-    
-    hideAddProfile();
-    loadProfiles();
-}
-
-function deleteProfile(i) {
-    let profiles = JSON.parse(localStorage.getItem('kpro_profiles') || '[]');
-    profiles.splice(i, 1);
-    localStorage.setItem('kpro_profiles', JSON.stringify(profiles));
-    loadProfiles();
-}
-
-// --- Login & Parsing M3U ---
-async function loginProfile(i) {
-    const profiles = JSON.parse(localStorage.getItem('kpro_profiles'));
-    const profile = profiles[i];
-    document.getElementById('active-profile-name').innerText = profile.name;
-    setActiveScreen('main-screen');
-
-    // Charger et parser le M3U (CORS Alert !)
-    currentM3uData = await fetchAndParseM3u(profile.url);
-}
-
-// --- Système de Lecture ---
-async function fetchAndParseM3u(url) {
-    try {
-        const response = await fetch(url); // Attention au CORS !
-        const text = await response.text();
-        return parseM3U(text);
-    } catch (err) {
-        alert("Erreur CORS détectée. Cette PWA doit être hébergée pour fonctionner pleinement.");
-        return null;
-    }
-}
-
+// 1. Fonction de Parsing Améliorée (Compatible Smarters)
 function parseM3U(content) {
     const lines = content.split('\n');
-    const items = { tv: [], movie: [], series: [] };
+    const data = { tv: [], movie: [], series: [] };
     
     for (let i = 0; i < lines.length; i++) {
         if (lines[i].startsWith('#EXTINF:')) {
             const infoLine = lines[i];
             const streamUrl = lines[i + 1]?.trim();
-            const name = infoLine.split(',')[1] || "Sans nom";
             
-            // Détection du type (simple pour cet exemple)
-            // Dans Smarters, cela se fait par categories group-title
-            let type = 'tv';
-            if (infoLine.includes('Movies') || infoLine.includes('Vod')) type = 'movie';
-            if (infoLine.includes('Series')) type = 'series';
+            if (!streamUrl || streamUrl.startsWith('#')) continue;
 
-            items[type].push({ name, url: streamUrl });
+            // Extraction du nom (après la dernière virgule)
+            const name = infoLine.split(',').pop().trim();
+            
+            // Extraction de la catégorie (group-title)
+            const groupMatch = infoLine.match(/group-title="(.*?)"/i);
+            const category = groupMatch ? groupMatch[1].toUpperCase() : "GÉNÉRAL";
+
+            const item = { name, url: streamUrl, category };
+
+            // Tri intelligent basé sur le group-title ou l'URL
+            if (category.includes('MOVIE') || category.includes('VOD') || streamUrl.includes('.mkv') || streamUrl.includes('.mp4')) {
+                data.movie.push(item);
+            } else if (category.includes('SERIE')) {
+                data.series.push(item);
+            } else {
+                data.tv.push(item);
+            }
         }
     }
-    return items;
+    return data;
 }
 
-function loadM3uContent(type) {
-    if (!currentM3uData) return alert("Liste non chargée");
-    const listHtml = currentM3uData[type].map(item => `
-        <div class="stream-item" onclick="playStream('${item.url}')">${item.name}</div>
-    `).join('');
+// 2. Chargement et Affichage des catégories
+async function loginProfile(i) {
+    const profiles = JSON.parse(localStorage.getItem('kpro_profiles'));
+    const profile = profiles[i];
+    document.getElementById('active-profile-name').innerText = profile.name;
     
-    document.getElementById('category-title').innerText = type.toUpperCase();
-    document.getElementById('stream-list').innerHTML = listHtml;
-    setActiveScreen('player-screen');
+    setActiveScreen('main-screen');
+
+    try {
+        const response = await fetch(profile.url);
+        const text = await response.text();
+        currentM3uData = parseM3U(text);
+        console.log("Données chargées :", currentM3uData);
+    } catch (err) {
+        alert("Erreur réseau ou CORS. Vérifiez que le lien est direct et accessible.");
+    }
 }
 
-function playStream(url) {
+// 3. Lecture du flux (Correction majeure)
+function playStream(url, name) {
+    console.log("Tentative de lecture :", url);
     const overlay = document.getElementById('video-overlay');
     overlay.classList.add('hidden');
 
     if (Hls.isSupported()) {
-        hls.destroy();
+        hls.destroy(); // On nettoie l'ancienne instance
+        hls = new Hls({
+            enableWorker: true,
+            lowLatencyMode: true
+        });
         hls.loadSource(url);
         hls.attachMedia(video);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Pour Safari Mobile
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            video.play().catch(e => console.log("Lancement auto bloqué :", e));
+        });
+        hls.on(Hls.Events.ERROR, (event, data) => {
+            if (data.fatal) {
+                console.error("Erreur HLS fatale :", data);
+                overlay.classList.remove('hidden');
+            }
+        });
+    } 
+    // Support natif (Safari / iPhone)
+    else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         video.src = url;
         video.play();
     }
+}
+
+// 4. Affichage de la liste avec sous-catégories
+function loadM3uContent(type) {
+    const list = currentM3uData[type];
+    if (!list || list.length === 0) {
+        document.getElementById('stream-list').innerHTML = "<p style='padding:20px'>Aucun contenu trouvé.</p>";
+        return;
+    }
+
+    // On regroupe par catégorie pour l'affichage
+    let html = '';
+    let lastCat = '';
+
+    list.forEach(item => {
+        if (item.category !== lastCat) {
+            lastCat = item.category;
+            html += `<div style="background:#222; color:#00e676; padding:5px 15px; font-size:0.7rem; font-weight:bold;">${lastCat}</div>`;
+        }
+        html += `<div class="stream-item" onclick="playStream('${item.url}', '${item.name.replace(/'/g, "\\'")}')">${item.name}</div>`;
+    });
+    
+    document.getElementById('category-title').innerText = type.toUpperCase();
+    document.getElementById('stream-list').innerHTML = html;
+    setActiveScreen('player-screen');
 }
