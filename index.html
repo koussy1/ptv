@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>K-Player Pro</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.10/hls.min.js"></script>
+</head>
+<body>
+
+<div id="app">
+    <div id="profile-screen" class="screen active">
+        <header>
+            <div class="logo">K-PLAYER PRO</div>
+        </header>
+        <main>
+            <h2>VOS PROFILS M3U</h2>
+            <div id="profile-list"></div>
+            <button class="btn btn-add" onclick="showAddProfile()">+ AJOUTER UN NOUVEAU PROFIL</button>
+        </main>
+    </div>
+
+    <div id="main-screen" class="screen">
+        <header>
+            <div class="logo" id="active-profile-name"></div>
+            <button class="btn-back" onclick="showProfileScreen()">←</button>
+        </header>
+        <main class="grid-container">
+            <div class="card" onclick="loadM3uContent('tv')">📺 LIVE TV</div>
+            <div class="card" onclick="loadM3uContent('movie')">🎬 FILMS</div>
+            <div class="card" onclick="loadM3uContent('series')">🍿 SÉRIES</div>
+        </main>
+    </div>
+
+    <div id="player-screen" class="screen">
+        <div class="player-layout">
+            <div class="sidebar">
+                <header>
+                    <button class="btn-back" onclick="showMainScreen()">←</button>
+                    <h3 id="category-title"></h3>
+                </header>
+                <div id="stream-list" class="stream-list"></div>
+            </div>
+            <div class="video-container">
+                <video id="video" controls></video>
+                <div id="video-overlay" class="hidden">
+                    <p>CORS BLOCK / URL INVALIDE</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="add-profile-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Ajouter un lien M3U</h3>
+            <input type="text" id="p-name" placeholder="Nom (ex: Ma Liste)">
+            <input type="text" id="p-url" placeholder="Lien M3U (obligatoire)">
+            <div class="modal-btns">
+                <button class="btn" onclick="hideAddProfile()">Annuler</button>
+                <button class="btn btn-primary" onclick="addNewProfile()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
