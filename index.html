@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>K-PLAYER ULTRA PRO</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.10/hls.min.js"></script>
+    <style>
+        :root {
+            --accent: #00ffa3;
+            --bg: #05060f;
+            --surface: #121421;
+            --surface-light: #1c1f33;
+            --text: #ffffff;
+            --text-dim: #a0a0a0;
+            --radius: 15px;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { 
+            margin: 0; font-family: 'Segoe UI', Roboto, sans-serif; 
+            background: var(--bg); color: var(--text); height: 100vh; overflow: hidden;
+        }
+
+        /* Systèmes d'écrans */
+        .screen { display: none; height: 100vh; flex-direction: column; animation: fadeIn 0.3s ease; }
+        .screen.active { display: flex; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        /* Header */
+        header { 
+            padding: 15px 20px; background: var(--surface); border-bottom: 1px solid rgba(255,255,255,0.05);
+            display: flex; justify-content: space-between; align-items: center; z-index: 10;
+        }
+        .logo { font-size: 1.3rem; font-weight: 800; color: var(--accent); letter-spacing: -1px; }
+
+        /* Formulaires Modernes */
+        .input-group { margin-bottom: 20px; width: 100%; }
+        .input-group label { display: block; margin-bottom: 8px; color: var(--accent); font-size: 0.75rem; font-weight: bold; text-align: left; }
+        input[type="text"] { 
+            width: 100%; background: #000; border: 2px solid #222; padding: 15px; 
+            border-radius: var(--radius); color: #fff; font-size: 1rem; transition: 0.3s;
+        }
+        input[type="text"]:focus { border-color: var(--accent); box-shadow: 0 0 15px rgba(0,255,163,0.1); }
+
+        /* Dashboard Menu */
+        .dashboard { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; padding: 15px; flex: 1; overflow-y: auto; }
+        .menu-card { 
+            background: var(--surface); border-radius: 20px; padding: 30px 10px; text-align: center;
+            border: 1px solid rgba(255,255,255,0.05); cursor: pointer; transition: 0.2s;
+        }
+        .menu-card:active { transform: scale(0.95); background: var(--surface-light); }
+        .menu-card span { font-size: 2.5rem; display: block; margin-bottom: 10px; }
+
+        /* PLAYER & LIST LOGIC */
+        .player-layout { display: flex; flex-direction: column; height: 100%; flex: 1; overflow: hidden; }
+        #video-box { background: #000; width: 100%; aspect-ratio: 16/9; position: relative; z-index: 5; }
+        video { width: 100%; height: 100%; object-fit: contain; }
+
+        .list-box { flex: 1; overflow-y: auto; background: #080912; }
+
+        /* Accordion Style */
+        .cat-item { border-bottom: 1px solid #111; }
+        .cat-btn { 
+            width: 100%; padding: 15px; background: var(--surface); border: none;
+            color: #fff; text-align: left; font-weight: bold; display: flex;
+            justify-content: space-between; align-items: center; cursor: pointer;
+        }
+        .cat-btn.open { color: var(--accent); background: var(--surface-light); }
+        .cat-btn::after { content: '▼'; font-size: 0.6rem; transition: 0.3s; }
+        .cat-btn.open::after { transform: rotate(180deg); }
+        
+        .cat-content { display: none; background: #000; }
+        .cat-content.open { display: block; }
+
+        .channel-row { 
+            display: flex; align-items: center; padding: 12px 15px; border-bottom: 1px solid #111; 
+            cursor: pointer; font-size: 0.85rem; color: #ccc;
+        }
+        .channel-row:active { background: #111; color: var(--accent); }
+        .channel-img { width: 40px; height: 28px; margin-right: 12px; object-fit: contain; background: #111; border-radius: 4px; }
+
+        /* RESPONSIVE PAYSAGE (Horizontal) */
+        @media (orientation: landscape) and (max-height: 500px) {
+            .player-layout { flex-direction: row !important; }
+            #video-box { width: 60% !important; height: 100vh !important; aspect-ratio: auto; }
+            .list-box { width: 40% !important; height: 100vh; }
+            header { display: none; } /* On cache le header en paysage pour gagner de la place */
+        }
+
+        /* Profiles */
+        .profile-card { background: var(--surface); padding: 20px; border-radius: var(--radius); margin-bottom: 15px; display: flex; align-items: center; border-left: 4px solid var(--accent); }
+
+        /* Modals */
+        .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 100; display: none; align-items: center; justify-content: center; padding: 20px; }
+        .modal.active { display: flex; }
+        .modal-content { background: var(--surface); padding: 30px; border-radius: 25px; width: 100%; max-width: 400px; text-align: center; }
+
+        .btn-main { background: var(--accent); color: #000; border: none; padding: 15px; border-radius: var(--radius); font-weight: bold; width: 100%; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div id="scr-profiles" class="screen active">
+        <header><div class="logo">K-PLAYER ULTRA</div></header>
+        <div style="padding: 20px; flex:1; overflow-y:auto;" id="profile-area"></div>
+        <div style="padding: 20px;">
+            <button class="btn-main" onclick="openModal()">+ AJOUTER UN LIEN M3U</button>
+        </div>
+    </div>
+
+    <div id="scr-dash" class="screen">
+        <header>
+            <button onclick="showScreen('scr-profiles')" style="background:none; border:none; color:#fff; font-size:1.5rem;">←</button>
+            <div class="logo" id="active-title">MENU</div>
+            <div style="width:30px"></div>
+        </header>
+        <div class="dashboard">
+            <div class="menu-card" onclick="loadType('tv')"><span>📺</span>LIVE TV</div>
+            <div class="menu-card" onclick="loadType('movie')"><span>🎬</span>VOD FILMS</div>
+            <div class="menu-card" onclick="loadType('series')"><span>🍿</span>SÉRIES TV</div>
+            <div class="menu-card" style="border-color: #333; opacity: 0.7;">
+                <span style="font-size:1rem; color:var(--accent)">INFOS</span>
+                <small id="count-info">0 chaînes</small>
+            </div>
+        </div>
+    </div>
+
+    <div id="scr-player" class="screen">
+        <div class="player-layout">
+            <div id="video-box">
+                <video id="main-video" controls playsinline autoplay></video>
+                <button onclick="showScreen('scr-dash')" style="position:absolute; top:15px; left:15px; background:rgba(0,0,0,0.6); color:#fff; border:none; border-radius:50%; width:38px; height:38px; z-index:10">←</button>
+            </div>
+            <div class="list-box" id="accordion-area"></div>
+        </div>
+    </div>
+
+    <div id="modal-add" class="modal">
+        <div class="modal-content">
+            <h2 style="margin-top:0">Nouveau Profil</h2>
+            <div class="input-group">
+                <label>NOM DU PROFIL</label>
+                <input type="text" id="in-name" placeholder="Ex: Mon IPTV">
+            </div>
+            <div class="input-group">
+                <label>LIEN M3U (HTTPS)</label>
+                <input type="text" id="in-url" placeholder="https://votre-lien.m3u">
+            </div>
+            <button class="btn-main" onclick="saveProfile()">SAUVEGARDER</button>
+            <button onclick="closeModal()" style="background:none; border:none; color:gray; margin-top:15px; cursor:pointer;">Annuler</button>
+        </div>
+    </div>
+
+    <script>
+        let state = {
+            profiles: JSON.parse(localStorage.getItem('k_v3_data') || '[]'),
+            data: { tv: [], movie: [], series: [] },
+            currentType: 'tv'
+        };
+
+        const video = document.getElementById('main-video');
+        let hls = new Hls();
+
+        function showScreen(id) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            if(id !== 'scr-player') video.pause();
+        }
+
+        function openModal() { document.getElementById('modal-add').classList.add('active'); }
+        function closeModal() { document.getElementById('modal-add').classList.remove('active'); }
+
+        // --- Gestion des Profils ---
+        function renderProfiles() {
+            const area = document.getElementById('profile-area');
+            if(state.profiles.length === 0) area.innerHTML = `<div style="text-align:center; margin-top:50px; color:var(--text-dim)">Aucune liste ajoutée.<br>Cliquez ci-dessous pour commencer.</div>`;
+            else {
+                area.innerHTML = state.profiles.map((p, i) => `
+                    <div class="profile-card">
+                        <div onclick="selectProfile(${i})" style="flex:1; cursor:pointer;">
+                            <strong style="color:var(--accent); font-size:1.1rem;">${p.name}</strong><br>
+                            <small style="color:var(--text-dim);">${p.url.substring(0,35)}...</small>
+                        </div>
+                        <button onclick="deleteProfile(${i})" style="background:none; border:none; color:#ff4444; font-size:1.5rem; cursor:pointer;">🗑️</button>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function saveProfile() {
+            const name = document.getElementById('in-name').value;
+            const url = document.getElementById('in-url').value;
+            if(!name || !url) return alert("Veuillez remplir les champs.");
+            state.profiles.push({name, url});
+            localStorage.setItem('k_v3_data', JSON.stringify(state.profiles));
+            closeModal();
+            renderProfiles();
+        }
+
+        function deleteProfile(i) {
+            if(confirm("Supprimer ce profil ?")) {
+                state.profiles.splice(i, 1);
+                localStorage.setItem('k_v3_data', JSON.stringify(state.profiles));
+                renderProfiles();
+            }
+        }
+
+        // --- Parsing M3U ---
+        async function selectProfile(i) {
+            const p = state.profiles[i];
+            document.getElementById('active-title').innerText = p.name.toUpperCase();
+            showScreen('scr-dash');
+            
+            try {
+                const res = await fetch(p.url);
+                const text = await res.text();
+                parseM3U(text);
+            } catch (e) { 
+                alert("Erreur de chargement. Vérifiez que le lien est HTTPS et sans erreur CORS."); 
+                showScreen('scr-profiles');
+            }
+        }
+
+        function parseM3U(content) {
+            const lines = content.split('\n');
+            state.data = { tv: [], movie: [], series: [] };
+            
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].startsWith('#EXTINF:')) {
+                    const info = lines[i];
+                    const url = lines[i+1]?.trim();
+                    if(!url || url.startsWith('#')) continue;
+
+                    const name = info.split(',').pop().trim();
+                    const group = info.match(/group-title="(.*?)"/i)?.[1] || "Général";
+                    const logo = info.match(/tvg-logo="(.*?)"/i)?.[1] || "";
+                    const item = { name, url, group, logo };
+
+                    if(info.toLowerCase().includes('movie') || url.includes('.mp4')) state.data.movie.push(item);
+                    else if(info.toLowerCase().includes('serie')) state.data.series.push(item);
+                    else state.data.tv.push(item);
+                }
+            }
+            document.getElementById('count-info').innerText = (state.data.tv.length) + " chaînes";
+        }
+
+        // --- Rendu Accordéon ---
+        function loadType(type) {
+            state.currentType = type;
+            const list = state.data[type];
+            const groups = [...new Set(list.map(i => i.group))];
+            
+            const area = document.getElementById('accordion-area');
+            if(list.length === 0) {
+                area.innerHTML = "<p style='padding:20px; text-align:center;'>Aucun contenu dans cette catégorie.</p>";
+            } else {
+                area.innerHTML = groups.map((g, idx) => `
+                    <div class="cat-item">
+                        <button class="cat-btn" id="btn-${idx}" onclick="toggleCat(${idx})">
+                            ${g.toUpperCase()}
+                        </button>
+                        <div class="cat-content" id="cat-${idx}">
+                            ${list.filter(i => i.group === g).map(item => `
+                                <div class="channel-row" onclick="play('${item.url}')">
+                                    <img class="channel-img" src="${item.logo}" onerror="this.src='https://via.placeholder.com/40x28/111/fff?text=TV'">
+                                    ${item.name}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `).join('');
+            }
+            showScreen('scr-player');
+        }
+
+        function toggleCat(idx) {
+            const content = document.getElementById(`cat-${idx}`);
+            const btn = document.getElementById(`btn-${idx}`);
+            const wasOpen = content.classList.contains('open');
+
+            // Ferme tout
+            document.querySelectorAll('.cat-content').forEach(c => c.classList.remove('open'));
+            document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('open'));
+
+            // Ouvre seulement celui cliqué s'il était fermé
+            if (!wasOpen) {
+                content.classList.add('open');
+                btn.classList.add('open');
+            }
+        }
+
+        // --- Lecteur ---
+        function play(url) {
+            if (Hls.isSupported()) {
+                hls.destroy();
+                hls = new Hls();
+                hls.loadSource(url);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = url;
+                video.play().catch(() => {});
+            }
+        }
+
+        renderProfiles();
+    </script>
+</body>
+</html>
